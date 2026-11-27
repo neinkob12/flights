@@ -1,4 +1,4 @@
-import { db, type Watch } from "@/lib/db";
+import { db, type Watch, T } from "@/lib/db";
 import { money } from "@/lib/format";
 import { telegramStartLink } from "@/lib/telegram";
 import { ManageButtons } from "./ManageButtons";
@@ -10,7 +10,7 @@ export default async function ManagePage({ params, searchParams }: {
 }) {
   const { id } = await params;
   const { t, confirmed } = await searchParams;
-  const { data } = t ? await db().from("watches").select("*").eq("id", id).eq("manage_token", t).maybeSingle() : { data: null };
+  const { data } = t ? await db().from(T.watches).select("*").eq("id", id).eq("manage_token", t).maybeSingle() : { data: null };
   const w = data as Watch | null;
   if (!w) return <div className="card"><h2>Watch not found</h2><p className="note">Check that you used the full manage link.</p></div>;
 

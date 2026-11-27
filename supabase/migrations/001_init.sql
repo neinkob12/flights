@@ -1,8 +1,30 @@
--- Fare Sniper schema. Run in the Supabase SQL editor (or `supabase db push`).
+-- Fare Sniper schema. Everything is prefixed fs_ so it can live safely inside
+-- a shared Supabase project. Access goes through the public (anon/publishable)
+-- key PLUS a secret header (x-fs-secret) checked by row level security, so no
+-- service-role key is needed.
 
 create extension if not exists pgcrypto;
 
-create table if not exists watches (
+create schema if not exists fs_private;
+revoke all on schema fs_private from public, anon, authenticated;
+
+create table if not exists fs_private.config (
+  id     int primary key default 1 check (id = 1),
+  secret text not null
+);
+-- After running this file once:
+--   insert into fs_private.config (secret) values ('<FS_DB_SECRET>')
+--   on conflict (id) do update set secret = excluded.secret;
+
+create or replace function public.fs_authorized() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce(
+    (current_setting('request.headers', true)::json ->> 'x-fs-secret')
+      = (select secret from fs_private.config where id = 1),
+    false)
+$$;
+
+create table if not exists public.fs_watches (
   id               uuid primary key default gen_random_uuid(),
   manage_token     text not null default encode(gen_random_bytes(18), 'hex'),
   origin           text not null check (origin ~ '^[A-Z]{3}$'),
@@ -26,13 +48,13 @@ create table if not exists watches (
   created_at       timestamptz not null default now(),
   check (depart_to >= depart_from)
 );
+create index if not exists fs_watches_active_idx on public.fs_watches (active, last_checked_at);
+create index if not exists fs_watches_email_idx on public.fs_watches (email);
+create index if not exists fs_watches_chat_idx on public.fs_watches (telegram_chat_id);
 
-create index if not exists watches_active_idx on watches (active, last_checked_at);
-create index if not exists watches_email_idx on watches (lower(email));
-
-create table if not exists alerts (
+create table if not exists public.fs_alerts (
   id         bigserial primary key,
-  watch_id   uuid not null references watches(id) on delete cascade,
+  watch_id   uuid not null references public.fs_watches(id) on delete cascade,
   price      numeric(10,2) not null,
   depart_at  text,
   return_at  text,
@@ -41,14 +63,20 @@ create table if not exists alerts (
   channels   text[] not null default '{}',
   created_at timestamptz not null default now()
 );
+create index if not exists fs_alerts_watch_idx on public.fs_alerts (watch_id);
 
--- Only the server (service role) touches these tables. No public policies.
-alter table watches enable row level security;
-alter table alerts  enable row level security;
+alter table public.fs_watches enable row level security;
+alter table public.fs_alerts  enable row level security;
 
--- Hourly price checks. Vercel's free plan only allows daily crons, so we let
--- Supabase call the endpoint instead. Replace the two placeholders, then run:
---
+drop policy if exists fs_watches_app on public.fs_watches;
+create policy fs_watches_app on public.fs_watches for all to anon, authenticated
+  using ((select public.fs_authorized())) with check ((select public.fs_authorized()));
+
+drop policy if exists fs_alerts_app on public.fs_alerts;
+create policy fs_alerts_app on public.fs_alerts for all to anon, authenticated
+  using ((select public.fs_authorized())) with check ((select public.fs_authorized()));
+
+-- Hourly price checks (Vercel's free plan only allows daily crons):
 -- create extension if not exists pg_cron;
 -- create extension if not exists pg_net;
 -- select cron.schedule('fare-sniper-check', '7 * * * *', $$

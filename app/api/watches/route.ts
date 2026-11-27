@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db, type Watch } from "@/lib/db";
+import { db, type Watch, T } from "@/lib/db";
 import { parseWatch } from "@/lib/validate";
 import { cheapestFare } from "@/lib/prices";
 import { telegramStartLink } from "@/lib/telegram";
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const input = parsed.value;
 
   if (input.email) {
-    const { count } = await db().from("watches").select("id", { count: "exact", head: true })
+    const { count } = await db().from(T.watches).select("id", { count: "exact", head: true })
       .eq("email", input.email).eq("active", true);
     if ((count ?? 0) >= MAX_PER_EMAIL) {
       return NextResponse.json({ error: `Max ${MAX_PER_EMAIL} active watches per email. Stop one first.` }, { status: 429 });
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     console.error("initial price check failed", e);
   }
 
-  const { data, error } = await db().from("watches")
+  const { data, error } = await db().from(T.watches)
     .insert({ ...input, last_price: current?.price ?? null, last_checked_at: current ? new Date().toISOString() : null })
     .select("*").single();
   if (error || !data) return NextResponse.json({ error: "Could not save the watch." }, { status: 500 });

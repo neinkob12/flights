@@ -1,11 +1,11 @@
 // Duffel booking API, used in TEST mode for the auto-hold demo.
 // Test mode returns sandbox airlines (e.g. "Duffel Airways") and never issues real tickets.
-import { env } from "./env";
 
 const BASE = "https://api.duffel.com";
 
 async function duffel<T>(path: string, body?: unknown): Promise<T> {
-  const key = env("DUFFEL_TEST_TOKEN");
+  const key = process.env.DUFFEL_TEST_TOKEN ?? "";
+  if (!key) throw new Error("The demo is not switched on yet (Duffel test key missing). Check back soon!");
   if (!key.startsWith("duffel_test_")) throw new Error("Demo only runs with a Duffel TEST token (duffel_test_...).");
   const res = await fetch(BASE + path, {
     method: body ? "POST" : "GET",

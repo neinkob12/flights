@@ -1,4 +1,4 @@
-import { db, type Watch } from "./db";
+import { db, type Watch, T } from "./db";
 import { cheapestFare, type Fare } from "./prices";
 import { sendTelegram } from "./telegram";
 import { sendEmail, emailEnabled } from "./email";
@@ -64,7 +64,7 @@ export async function alertWatch(w: Watch, fare: Fare): Promise<string[]> {
 export async function runCheck(limit = 40, budgetMs = 50_000) {
   const started = Date.now();
   const { data, error } = await db()
-    .from("watches")
+    .from(T.watches)
     .select("*")
     .eq("active", true)
     .order("last_checked_at", { ascending: true, nullsFirst: true })
@@ -77,7 +77,7 @@ export async function runCheck(limit = 40, budgetMs = 50_000) {
   for (const w of (data ?? []) as Watch[]) {
     if (Date.now() - started > budgetMs) break;
     if (w.depart_to < today) {
-      await db().from("watches").update({ active: false }).eq("id", w.id);
+      await db().from(T.watches).update({ active: false }).eq("id", w.id);
       result.expired++;
       continue;
     }
@@ -90,14 +90,14 @@ export async function runCheck(limit = 40, budgetMs = 50_000) {
         if (channels.length) {
           patch.last_alert_price = fare.price;
           patch.last_alert_at = new Date().toISOString();
-          await db().from("alerts").insert({
+          await db().from(T.alerts).insert({
             watch_id: w.id, price: fare.price, depart_at: fare.departAt, return_at: fare.returnAt,
             airline: fare.airline, link: fare.bookingUrl, channels,
           });
           result.alerted++;
         }
       }
-      await db().from("watches").update(patch).eq("id", w.id);
+      await db().from(T.watches).update(patch).eq("id", w.id);
       result.checked++;
     } catch (e) {
       console.error("check failed", w.id, e);

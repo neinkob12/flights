@@ -3,14 +3,18 @@ import { env } from "./env";
 
 let client: SupabaseClient | null = null;
 
+/** Supabase client using the publishable key + the app secret header (checked by RLS). */
 export function db(): SupabaseClient {
   if (!client) {
-    client = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
-      auth: { persistSession: false },
+    client = createClient(env("SUPABASE_URL"), env("SUPABASE_KEY"), {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { "x-fs-secret": env("FS_DB_SECRET") } },
     });
   }
   return client;
 }
+
+export const T = { watches: "fs_watches", alerts: "fs_alerts" } as const;
 
 export type Watch = {
   id: string;
